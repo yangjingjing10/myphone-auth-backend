@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>授权码管理后台</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 { color: #1a202c; margin-bottom: 32px; }
+    .actions {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 12px 24px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    button:hover { background: #5568d3; transform: translateY(-1px); }
+    button.danger { background: #e53e3e; }
+    button.danger:hover { background: #c53030; }
+    input {
+      padding: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      width: 200px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    th {
+      background: #f7fafc;
+      font-weight: 600;
+      color: #4a5568;
+    }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status.unused { background: #c6f6d5; color: #22543d; }
+    .status.used { background: #fed7d7; color: #742a2a; }
+    .code { font-family: 'Courier New', monospace; font-weight: 600; }
+    .device-id { font-size: 12px; color: #718096; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 授权码管理后台</h1>
+    
+    <div class="actions">
+      <input type="number" id="count" value="1" min="1" max="100" placeholder="生成数量">
+      <input type="text" id="notes" placeholder="备注信息（可选）">
+      <button onclick="generateCodes()">生成授权码</button>
+      <button onclick="loadCodes()">刷新列表</button>
+    </div>
+
+    <div id="result"></div>
+
+    <table id="codesTable">
+      <thead>
+        <tr>
+          <th>授权码</th>
+          <th>状态</th>
+          <th>设备ID</th>
+          <th>创建时间</th>
+          <th>激活时间</th>
+          <th>备注</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="codesBody">
+        <tr><td colspan="7" style="text-align:center;color:#718096;">加载中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000/api'
+
+    async function generateCodes() {
+      const count = document.getElementById('count').value
+      const notes = document.getElementById('notes').value
+
+      const res = await fetch(`${API_BASE}/admin/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: parseInt(count), notes })
+      })
+
+      const data = await res.json()
+      
+      if (data.success) {
+        document.getElementById('result').innerHTML = `
+          <div style="background:#c6f6d5;color:#22543d;padding:16px;border-radius:8px;margin-bottom:20px;">
+            <strong>✓ 成功生成 ${data.codes.length} 个授权码：</strong><br><br>
+            ${data.codes.map(code => `<code class="code">${code}</code>`).join('<br>')}
+          </div>
+        `
+        loadCodes()
+      }
+    }
+
+    async function loadCodes() {
+      const res = await fetch(`${API_BASE}/admin/codes`)
+      const data = await res.json()
+
+      if (data.success) {
+        const tbody = document.getElementById('codesBody')
+        tbody.innerHTML = data.codes.map(code => `
+          <tr>
+            <td><span class="code">${code.auth_code}</span></td>
+            <td><span class="status ${code.is_used ? 'used' : 'unused'}">${code.is_used ? '已使用' : '未使用'}</span></td>
+            <td><span class="device-id">${code.device_id || '-'}</span></td>
+            <td>${new Date(code.created_at).toLocaleString('zh-CN')}</td>
+            <td>${code.activated_at ? new Date(code.activated_at).toLocaleString('zh-CN') : '-'}</td>
+            <td>${code.notes || '-'}</td>
+            <td><button class="danger" onclick="deleteCode('${code.auth_code}')">删除</button></td>
+          </tr>
+        `).join('')
+      }
+    }
+
+    async function deleteCode(code) {
+      if (!confirm('确定要删除这个授权码吗？')) return
+
+      await fetch(`${API_BASE}/admin/codes/${code}`, { method: 'DELETE' })
+      loadCodes()
+    }
+
+    // 页面加载时获取授权码列表
+    loadCodes()
+  </script>
+</body>
+</html>
+
